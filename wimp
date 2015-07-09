@@ -1,0 +1,518 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Authenticate Pocket</title>
+    <meta charset="utf-8" />
+    <style type="text/css">
+.hidden {display: none;}
+
+
+    </style>
+  </head>
+  <body>
+
+<?php
+$self = (isset($_SERVER['HTTPS']) ? "https://" : "http://").$_SERVER['HTTP_HOST'].$_SERVER['PHP_SELF'];
+function cURL($url, $post) {
+	$cURL = curl_init();
+	curl_setopt($cURL, CURLOPT_URL, $url);
+	curl_setopt($cURL, CURLOPT_HEADER, 0);
+	curl_setopt($cURL, CURLOPT_HTTPHEADER, array('Content-type: application/x-www-form-urlencoded;charset=UTF-8'));
+	curl_setopt($cURL, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($cURL, CURLOPT_TIMEOUT, 5);
+	curl_setopt($cURL, CURLOPT_SSL_VERIFYPEER, false);
+	curl_setopt($cURL, CURLOPT_POST, count($post));
+	curl_setopt($cURL, CURLOPT_POSTFIELDS, http_build_query($post));
+	$output = curl_exec($cURL);
+	curl_close($cURL);
+	return $output;
+}
+
+//$consumer_key = "37324-ca2233ecfef570bf94eeb026";
+
+
+if (isset($_GET['consumer_key'])) {
+ $consumer_key = $_GET['consumer_key'];
+if (isset ($_GET["token"])) {
+// Numbers in comments represent the steps as described at http://getpocket.com/developer/docs/authentication
+// (4) Receive the callback from Pocket
+// (5) Convert a request token into a Pocket access token
+$oAuthRequest = cURL(
+   'https://getpocket.com/v3/oauth/authorize',
+   array(
+    'consumer_key' => $consumer_key, 
+    'code' => $_GET["token"]
+   )
+ );
+
+ $access_token = explode('&', $oAuthRequest);
+ $access_token = $access_token[0];
+ $access_token = explode('=', $access_token);
+ $access_token = $access_token[1];
+
+} else {
+ // (2) Obtain request token
+ $oAuthRequestToken = explode('=', cURL(
+   'https://getpocket.com/v3/oauth/request',
+   array(
+  	 'consumer_key' => $consumer_key,
+  	 'redirect_uri' => $self."?consumer_key=$consumer_key"
+   )
+ ));
+ // (3) Redirect user to Pocket to continue authorization
+ echo '<meta http-equiv="refresh" content="0;url=' . 'https://getpocket.com/auth/authorize?request_token=' . urlencode($oAuthRequestToken[1]) . '&redirect_uri=' . urlencode($self."?consumer_key=$consumer_key" . '&token=' . $oAuthRequestToken[1]) . '" />';
+ }
+//echo '<h1>Authenticate Pocket</h1>';
+echo '<form><table><tr>';
+echo '<td><label for="consumer_key">Consumer key</label></td>';
+echo '<td><input type="text" id="consumer_key" name="consumer_key" value="' . $consumer_key . '"></td></tr>';
+if (isset($access_token)){
+
+//echo '<td><label for="access_token">Access token</label></td>';
+//echo '<td><input type="text" id="access_token" name="access_token" value="' . $access_token . '"></td></tr>';
+
+
+
+
+$url = 'https://getpocket.com/v3/get?count=100&detailType=complete&state=all';
+  $data = array(
+    'consumer_key' => $consumer_key, 
+    'access_token' => $access_token
+  );
+  $options = array(
+    'http' => array(
+      'method'  => 'POST',
+      'content' => http_build_query($data)
+    )
+  );
+  $context  = stream_context_create($options);
+  $result = file_get_contents($url, false, $context);
+  //echo "<pre>" . print_r($result) . "</pre>";
+
+
+  $result = json_decode($result,true);
+  //echo count($result);
+  //if(is_array($result)){echo("hi");}
+  //else {echo ("hey something's wrong");};
+
+  $i = 0; 
+  $i2 = 0;
+
+  $word_count = 0;
+$alltitles = "the";
+$allurls = "www.google.com";
+$alltags = "_untagged_";
+$unreadtotal = 0;
+$archivedtotal = 0;
+$alltimes = 0;
+$allurlsuntouched = "www.google.com";
+
+
+echo '<p class="hidden">';
+
+foreach ($result as $each_result) { 
+    $i++; 
+    //echo "<h2>Result $i</h2>"; 
+    if (is_array($each_result)) {
+    while (list($key, $value) = each ($each_result)) { 
+        $i2++;                                      
+        //echo "$key: $value<br />"; 
+    if (is_array($value)) {
+        while (list($key2, $value2) = each ($value)) {                               
+        //echo "$key2: $value2<br />"; 
+              if($key2 == 'word_count'){
+               // echo $value2;
+              $word_count += $value2;
+                  }
+              if($key2 == 'resolved_title'){
+              $alltitles = $alltitles." ; ".$value2;
+                }
+
+                if($key2 == 'resolved_url'){
+                  $newurl = parse_url($value2);
+                  $newurl2 = $newurl[host];
+                  $allurls = $allurls." ; ".$newurl2;
+                  $allurlsuntouched = $allurlsuntouched." ; ".$value2;
+                }
+
+                if($key2 == 'status' and $value2 == 0){
+                    $unreadtotal += 1;
+
+                }
+
+                if($key2 == 'status' and $value2 == 1){
+                    $archivedtotal += 1;
+
+                }
+
+                if($key2 == 'time_added'){
+                  $newtime = $value2;
+                  $alltimes = $alltimes." ; ".$newtime;
+                  //echo $newtime;
+                  //echo $alltimes;
+                }
+
+
+
+                if($key2 == 'tags'){
+                  /*$newtagorg = json_decode($value2);
+                  $newtag = $value2[0];
+              $alltags = $alltags." ; ".$newtag;
+             // echo "<br />";
+             // echo gettype($value2);
+              print_r($value2);
+              print_r(array_keys($value2));
+              // echo "<br />";
+
+              //echo $newtagorg;
+              // echo gettype($newtag);
+              print_r($newtag);
+
+              //echo gettype($value2[0]);
+              //print_r(array_keys($value2[0]));
+*/            //echo "<br />";
+              $newtag = array_map(function ($ar) {return $ar['tag'];}, $value2);
+              print_r($newtag);
+              //echo gettype($newtag);
+             // echo "<br />";
+              $newtag = implode(" ",$newtag);
+            // echo $newtag;
+              $alltags = $alltags." ".$newtag;
+
+
+
+
+                }
+
+
+
+        } 
+        }        else{;}
+
+         
+      } 
+          }        else{;}
+
+
+} 
+echo '</p>';
+$i2=$i2-1;
+$wordperarticle = $word_count/$i2;
+$wordperarticle = round($wordperarticle);
+$timeperarticle = $wordperarticle/400;
+$timeperarticle = round($timeperarticle);
+echo "Hey there!";
+echo "<br />";
+echo "You have pocketed a total of ".$i2." articles and ".$word_count." words.";
+echo "<br />";
+echo $unreadtotal." are unread articles while ".$archivedtotal." have been archived.";
+echo "<br />";
+echo "Your average article is about ".$wordperarticle." words long and takes about ".$timeperarticle." minutes to read.";
+//echo $alltitles;
+//echo "<br />";
+//echo $allurls;
+//echo "<br />";
+//echo $alltags;
+//echo "<br />";
+//echo $alltimes;
+//echo "<br />";
+//echo $allurlsuntouched;
+
+
+$alltitles2 = explode(" ; ", $alltitles);
+$alltitles = explode(" ", $alltitles);
+$allurls = explode(" ; ", $allurls);
+$alltags = explode(" ", $alltags);
+$alltimes = explode(" ; ", $alltimes);
+$allurlsuntouched = explode(" ; ", $allurlsuntouched);
+
+
+//echo "<br />";
+//echo "<br />";
+//print_r($alltitles2);
+//echo "<br />";
+//print_r($allurlsuntouched);
+//echo "<br />";
+//echo "<br />";
+$keywordsearch = array_combine($allurlsuntouched, $alltitles2);
+//print_r($keywordsearch);
+//echo "<br />";
+//echo "<br />";
+
+
+
+$stopwords = array(";", "", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "-", "--", "we've", "we'll", "we're", "who'll", "who've", "who's", "you'll", "you've", "you're", "i'll", "i've", "i'm", "i'd", "he'll", "he'd", "he's", "she'll", "she'd", "she's", "it'll", "it'd", "it's", "they've", "they're", "they'll", "didn't", "don't", "can't", "won't", "isn't", "wasn't", "couldn't", "should't", "wouldn't", "ve", "ll", "re", "th", "rd", "st", "doing", "allow", "examining", "using", "during", "within", "across", "among", "whether", "especially", "without", "actually", "another", "am", "because", "cannot", "the", "of", "to", "and", "a", "in", "is", "it", "you", "that", "he", "was", "for", "on", "are", "with", "as", "I", "his", "they", "be", "at", "one", "have", "this", "from", "or", "had", "by", "hot", "word", "but", "what", "some", "we", "yet", "can", "out", "other", "were", "all", "there", "when", "up", "use", "your", "how", "said", "an", "each", "she", "which", "do", "their", "time", "if", "will", "shall", "way", "about", "many", "then", "them", "would", "like", "so", "these", "her", "long", "make", "thing", "see", "him", "two", "has", "look", "more", "day", "could", "go", "come", "did", "no", "yes", "most", "my", "over", "know", "than", "call", "first", "who", "may", "down", "side", "been", "now", "find", "any", "new", "part", "take", "get", "place", "made", "where", "after", "back", "little", "only", "came", "show", "every", "good", "me", "our", "under", "upon", "very", "through", "just", "great", "say", "low", "cause", "much", "mean", "before", "move", "right", "too", "same", "tell", "does", "set", "three", "want", "well", "also", "put", "here", "must", "big", "high", "such", "why", "ask", "men", "went", "kind", "need", "try", "again", "near", "should", "still", "between", "never", "last", "let", "though", "might", "saw", "left", "late", "run", "don't", "while", "close", "few", "seem", "next", "got", "always", "those", "both", "often", "thus", "won't", "not", "into", "inside", "its", "makes", "tenth", "trying", "i", "me", "my", "myself", "we", "us", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she", "her", "hers", "herself", "it", "its", "itself", "they", "them", "their", "theirs", "themselves", "what", "which", "who", "whom", "this", "that", "these", "those", "am", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "having", "do", "does", "did", "doing", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "ought", "i'm", "you're", "he's", "she's", "it's", "we're", "they're", "i've", "you've", "we've", "they've", "i'd", "you'd", "he'd", "she'd", "we'd", "they'd", "i'll", "you'll", "he'll", "she'll", "we'll", "they'll", "isn't", "aren't", "wasn't", "weren't", "hasn't", "haven't", "hadn't", "doesn't", "don't", "didn't", "won't", "wouldn't", "shan't", "shouldn't", "can't", "cannot", "couldn't", "mustn't", "let's", "that's", "who's", "what's", "here's", "there's", "when's", "where's", "why's", "how's", "daren't", "needn't", "oughtn't", "mightn't", "a", "an", "the", "and", "but", "if", "or", "because", "as", "until", "while", "of", "at", "by", "for", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "to", "from", "up", "down", "in", "out", "on", "off", "over", "under", "again", "further", "then", "once", "here", "there", "when", "where", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very", "one", "every", "least", "less", "many", "now", "ever", "never", "say", "says", "said", "also", "get", "go", "goes", "just", "made", "make", "put", "see", "seen", "whether", "like", "well", "back", "even", "still", "way", "take", "since", "another", "however", "two", "three", "four", "five", "first", "second", "new", "old", "high", "long", "—");  
+$alltitles = array_udiff($alltitles, $stopwords,'strcasecmp');
+
+$allurls = array_count_values($allurls);
+$alltitles = array_count_values($alltitles);
+$alltags = array_count_values($alltags);
+
+
+arsort($allurls);
+arsort($alltitles);
+arsort($alltags);
+
+
+//print_r($alltitles);
+//print_r($allurls);
+//print_r($alltags);
+//print_r($alltimes);
+//print_r($allurlsuntouched);
+
+
+echo "<br />";
+echo "<br />";
+/*
+print_r($allurls);
+echo "<br />";
+$allurls = array_flip($allurls);
+print_r($allurls);
+echo "<br />";
+
+
+$searchword = current($allurls);
+echo $searchword;
+$matches = array_filter($allurlsuntouched, function($var) use ($searchword) { return preg_match("/\b$searchword\b/i", $var); });
+print_r($matches);
+echo current($matches);
+echo next($matches);
+echo "<br />";
+echo next($matches);
+echo "<br />";
+$numofmatches=count($matches);
+echo $numofmatches;
+
+echo "<br />";
+
+$searchword2 = next($allurls);
+echo $searchword2;
+$matches2 = array_filter($allurlsuntouched, function($var) use ($searchword2) { return preg_match("/\b$searchword2\b/i", $var); });
+print_r($matches2);
+echo current($matches2);
+echo next($matches2);
+echo next($matches2);
+echo "<br />";
+$numofmatches2=count($matches2);
+echo $numofmatches2;
+
+*/
+
+echo "<br />";
+echo "<br />";
+//print_r($allurls);
+$allurls2 = array_keys($allurls);
+$urlnumber = 0;
+
+for ($urlnumber = 0; $urlnumber <= 5; $urlnumber++) {
+    $searchterm = $allurls2[$urlnumber];
+    echo $searchterm;
+    echo "<br />";
+    $matches2 = array_filter($allurlsuntouched, function($var) use ($searchterm) { return preg_match("/\b$searchterm\b/i", $var); });
+//print_r($matches2);
+$matches2 = array_values($matches2);
+//print_r($matches2);
+$match_length = count($matches2);
+for($iq=0;$iq<$match_length;$iq++)
+{
+echo $matches2[$iq];
+echo "<br />";
+
+}
+echo $match_length;
+echo "<br />";
+} 
+
+
+
+echo "<br />";
+echo "<br />";
+
+
+//$alltags = array_flip($alltags);
+$alltagscount = array_values($alltags);
+$alltags = array_keys($alltags);
+print_r($alltags);
+echo "<br />";
+print_r($alltagscount);
+echo "<br />";
+$taglength = count($alltags);
+
+for ($x = 0; $x < $taglength; $x++) {
+    $tag = $alltags[$x];
+    echo "https://getpocket.com/a/queue/list/".$tag;
+    $tagcount = $alltagscount[$x];
+    echo " ".$tagcount;
+    echo "<br />";
+
+} 
+
+
+/*$tag1 = current($alltags);
+$tag2 = next($alltags);  
+echo $tag1;
+echo $tag2;
+$tag3 = next($alltags);  
+echo $tag3;
+$tag4 = next($alltags);  
+echo $tag4;*/
+
+
+
+echo "<br />";
+echo "<br />";
+
+
+//print_r($alltitles);
+echo "<br />";
+//$alltitles = array_flip($alltitles);
+//print_r($alltitles);
+
+echo "<br />";
+
+
+foreach ($alltitles as $key => $value) {
+    if (strlen($key) < 3) {
+        unset($alltitles[$key]);
+    }
+}
+
+print_r($alltitles);
+
+echo "<br />";
+echo "<br />";
+
+$alltitles = array_keys($alltitles);
+/*print_r($alltitles);
+
+echo "<br />";
+echo "<br />";
+
+
+foreach ($keywordsearch as $key => $value) :
+    if (strpos($value, 'Bullshit') !== false):
+        echo $key;
+        echo "<br />";
+
+    endif;
+endforeach;
+
+//echo "<br />";
+
+$keyword1 = reset($alltitles);
+
+foreach ($keywordsearch as $key => $value) :
+    if (strpos($value, $keyword1) !== false):
+        echo $key;
+        echo "<br />";
+
+    endif;
+endforeach;
+
+echo "<br />";
+
+$keyword2 = next($alltitles);
+
+foreach ($keywordsearch as $key => $value) :
+    if (strpos($value, $keyword2) !== false):
+        echo $value." / ";
+        echo $key;
+        echo "<br />";
+
+    endif;
+endforeach;
+
+echo "<br />";
+
+echo $keyword1;
+echo $keyword2;
+
+
+echo "<br />";
+echo "<br />";
+echo "<br />";
+echo "<br />";*/
+
+for ($x = 0; $x < 10; $x++) {
+$keyword = $alltitles[$x];
+echo $keyword;
+echo "<br />";
+foreach ($keywordsearch as $key => $value) :
+    if (strpos($value, $keyword) !== false):
+        echo $value." / ";
+        echo $key;
+        echo "<br />";
+
+    endif;
+endforeach;
+
+echo "<br />";
+
+}
+
+
+echo "<br />";
+echo "<br />";
+echo "<br />";
+echo "<br />";
+
+$newestdate = time(oid);
+echo $newestdate;
+echo "<br />";
+
+$count1 = 0;
+$count2 = 0;
+$count3 = 0;
+
+
+
+
+foreach ($alltimes as $key => $value) {
+
+  if ($value > $newestdate - 86400*1) {
+$count1 ++;
+} elseif ($value > $newestdate - 86400*2) {
+$count2 ++;
+} else {
+$count3 ++;
+}
+  # code...
+}
+
+echo "<br />";
+echo $count1;
+echo "<br />";
+echo $count2;
+echo "<br />";
+$count3 = $count3-1;
+echo $count3;
+echo "<br />";
+
+echo "<br />";
+echo "<br />";
+echo "<br />";
+echo "<br />";
+
+
+print_r($alltimes);
+
+
+
+
+
+
+
+}
+echo '</table></form>';
+} else {
+echo '<h1>Authenticate pocket</h1>';
+echo '<form><table><tr>';
+echo '<td><label for="consumer_key">Consumer key</label></td>';
+echo '<td><input type="text" id="consumer_key" name="consumer_key" value="37324-ca2233ecfef570bf94eeb026"></td></tr>';
+echo '</table><input type="submit" value="Absenden"></form>';
+}
+?>
+
+</body>
+</html>
+</html>
